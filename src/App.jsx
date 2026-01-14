@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from "react";
+import { useLanguage } from "./contexts/LanguageContext";
 
 function App() {
+  const { language, toggleLanguage, t } = useLanguage();
   const [scrollY, setScrollY] = useState(0);
   const [showForm, setShowForm] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState("");
   const [hasSunroof, setHasSunroof] = useState("");
   const [formData, setFormData] = useState({
@@ -13,22 +17,22 @@ function App() {
     carYear: "",
     carModel: "",
     sunroof: "",
+    panoramicSunroof: "",
     electricSunroof: "",
+    manualSunroof: "",
   });
   const [formErrors, setFormErrors] = useState({});
 
   // Validation functions
   const validateEmail = (email) => {
     if (!email.includes("@")) {
-      return { isValid: false, message: "Email must contain @ symbol" };
+      return { isValid: false, message: t("emailMustContainAt") };
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const isValid = emailRegex.test(email);
     return {
       isValid,
-      message: isValid
-        ? ""
-        : "Please enter a valid email address (example@domain.com)",
+      message: isValid ? "" : t("emailInvalid"),
     };
   };
 
@@ -44,7 +48,7 @@ function App() {
 
     // Required field validation
     if (!formData.name.trim()) {
-      errors.name = "Name is required";
+      errors.name = t("nameRequired");
     }
 
     if (
@@ -52,37 +56,46 @@ function App() {
       formData.phone.trim() === "+966" ||
       formData.phone.trim() === "+966 "
     ) {
-      errors.phone = "Phone number is required";
+      errors.phone = t("phoneRequired");
     } else if (!validatePhone(formData.phone)) {
-      errors.phone =
-        "Please enter a valid 9-digit Saudi mobile number (5XXXXXXXX)";
+      errors.phone = t("phoneInvalid");
     }
 
     if (!formData.email.trim()) {
-      errors.email = "Email is required";
+      errors.email = t("emailRequired");
     } else {
       const emailValidation = validateEmail(formData.email);
       if (!emailValidation.isValid) {
-        errors.email = emailValidation.message;
+        errors.email = emailValidation.message === "Email must contain @ symbol"
+          ? t("emailMustContainAt")
+          : t("emailInvalid");
       }
     }
 
     if (!formData.carYear) {
-      errors.carYear = "Car year is required";
+      errors.carYear = t("carYearRequired");
     } else if (formData.carYear < 1990 || formData.carYear > 2025) {
-      errors.carYear = "Car year must be between 1990 and 2025";
+      errors.carYear = t("carYearInvalid");
     }
 
     if (!formData.carModel.trim()) {
-      errors.carModel = "Car model is required";
+      errors.carModel = t("carModelRequired");
     }
 
     if (!formData.sunroof) {
-      errors.sunroof = "Please select if your car has a sunroof";
+      errors.sunroof = t("sunroofRequired");
     }
 
     if (formData.sunroof === "yes" && !formData.electricSunroof) {
-      errors.electricSunroof = "Please specify if the sunroof is electric";
+      errors.electricSunroof = t("electricSunroofRequired");
+    }
+
+    if (formData.sunroof === "yes" && !formData.panoramicSunroof) {
+      errors.panoramicSunroof = t("panoramicSunroofRequired");
+    }
+
+    if (formData.sunroof === "yes" && !formData.manualSunroof) {
+      errors.manualSunroof = t("manualSunroofRequired");
     }
 
     return errors;
@@ -123,9 +136,8 @@ function App() {
     handleInputChange("phone", formattedValue);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-
     const errors = validateForm();
 
     if (Object.keys(errors).length > 0) {
@@ -133,21 +145,61 @@ function App() {
       return;
     }
 
-    // Form is valid, proceed with submission
-    alert("Thank you! We will contact you shortly with your quote.");
-    setShowForm(false);
-    setHasSunroof("");
-    setFormData({
-      name: "",
-      phone: "+966 ",
-      email: "",
-      instagram: "",
-      carYear: "",
-      carModel: "",
-      sunroof: "",
-      electricSunroof: "",
-    });
-    setFormErrors({});
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch("https://formspree.io/f/meeojqep", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          // Form fields in order
+          name: formData.name,
+          phone: formData.phone,
+          email: formData.email,
+          instagram: formData.instagram,
+          carYear: formData.carYear,
+          carModel: formData.carModel,
+          sunroof: formData.sunroof,
+          panoramicSunroof: formData.panoramicSunroof,
+          electricSunroof: formData.electricSunroof,
+          manualSunroof: formData.manualSunroof,
+          selected_package: selectedPackage,
+          // Formspree configuration
+          _subject: "New Quote Request - Arabic Caliber",
+          _replyto: formData.email,
+        }),
+      });
+
+      if (response.ok) {
+        // Show custom success message
+        setShowSuccess(true);
+        setShowForm(false);
+        // Reset form
+        setFormData({
+          name: "",
+          phone: "+966 ",
+          email: "",
+          instagram: "@",
+          carYear: "",
+          carModel: "",
+          sunroof: "",
+          panoramicSunroof: "",
+          electricSunroof: "",
+          manualSunroof: "",
+        });
+        setHasSunroof("");
+        setFormErrors({});
+      } else {
+        throw new Error("Form submission failed");
+      }
+    } catch (error) {
+      console.error("Error submitting form:", error);
+      alert("There was an error submitting your form. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const closeForm = () => {
@@ -157,11 +209,13 @@ function App() {
       name: "",
       phone: "+966 ",
       email: "",
-      instagram: "",
+      instagram: "@",
       carYear: "",
       carModel: "",
       sunroof: "",
+      panoramicSunroof: "",
       electricSunroof: "",
+      manualSunroof: "",
     });
     setFormErrors({});
   };
@@ -208,6 +262,15 @@ function App() {
         position: "relative",
         zIndex: 1,
       }}>
+      {/* Language Switcher */}
+      <div className={`fixed top-4 z-50 ${language === "ar" ? "left-4" : "right-4"}`}>
+        <button
+          onClick={toggleLanguage}
+          className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition font-semibold border-2 border-primary">
+          {language === "en" ? "العربية" : "English"}
+        </button>
+      </div>
+
       {/* Stars Background - Fixed */}
       <div className="fixed inset-0 starry-night opacity-80 pointer-events-none z-0"></div>
       {/* Palm trees silhouette - Background left side */}
@@ -272,9 +335,9 @@ function App() {
       </div>
 
       {/* Header/Hero Section */}
-      <header className="relative min-h-screen flex justify-center items-center section-padding">
+      <header className="relative min-h-screen flex justify-center items-center section-padding z-10">
         {/* Logo and Title */}
-        <div className="text-center max-w-4xl mx-auto">
+        <div className="text-center max-w-4xl mx-auto relative z-10">
           {/* Arabic Caliber Logo */}
           <div className="">
             <img
@@ -290,7 +353,7 @@ function App() {
 
           {/* Tagline */}
           <p className="text-xl md:text-2xl text-gray-300 mb-8 max-w-2xl mx-auto">
-            Premium Car Star Lights Installation
+            {t("tagline")}
           </p>
 
           {/* CTA Button */}
@@ -302,77 +365,101 @@ function App() {
                   document.getElementById("packages-section");
                 packagesSection?.scrollIntoView({ behavior: "smooth" });
               }}>
-              View Services
+              {t("viewServices")}
             </button>
           </div>
         </div>
       </header>
 
+      {/* The Experience Section */}
+      <section className="relative py-10 section-padding z-10">
+        <div className="max-w-4xl mx-auto">
+          <h2 className="text-4xl md:text-5xl font-bold text-center text-primary mb-8 font-title">
+            {t("theExperience")}
+          </h2>
+          <div className="bg-gray-800 rounded-lg p-8">
+            <p className="text-gray-300 text-lg leading-relaxed">
+              {t("experienceText")}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Craftsmanship & Installation Section */}
+      <section className="relative py-10 section-padding z-10">
+        <div className="max-w-4xl mx-auto">
+          <h2 className="text-4xl md:text-5xl font-bold text-center text-primary mb-8 font-title">
+            {t("craftsmanshipInstallation")}
+          </h2>
+          <div className="bg-gray-800 rounded-lg p-8">
+            <p className="text-gray-300 text-lg leading-relaxed">
+              {t("craftsmanshipText")}
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* Product Quality Section */}
-      <section className="relative py-20 section-padding z-10">
+      <section className="relative py-10 section-padding z-10">
         <div className="max-w-6xl mx-auto">
-          <h2 className="text-4xl md:text-5xl font-bold text-center text-primary mb-16">
-            Premium Star Light Technology
+          <h2 className="text-4xl md:text-5xl font-bold text-center text-primary mb-16 font-title">
+            {t("premiumStarLightTechnology")}
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
             {/* Quality Point 1 */}
             <div className="text-center bg-white/10 backdrop-blur-sm rounded-lg p-6 hover:bg-white/20 transition-all duration-300">
-              <div className="text-primary text-5xl mb-4">💎</div>
-              <h3 className="text-xl font-semibold mb-3">
-                Premium Fiber Optics
+              <h3 className="text-xl font-semibold mb-3 font-title">
+                {t("premiumFiberOptics")}
               </h3>
               <p className="text-gray-300">
-                Highest-grade fiber optic cables for unmatched brightness and clarity, giving your headliner a natural, star-filled glow.
+                {t("premiumFiberOpticsDesc")}
               </p>
             </div>
 
             {/* Quality Point 2 */}
             <div className="text-center bg-white/10 backdrop-blur-sm rounded-lg p-6 hover:bg-white/20 transition-all duration-300">
-              <div className="text-primary text-5xl mb-4">🔬</div>
-              <h3 className="text-xl font-semibold mb-3">
-                Advanced LED Technology
+              <h3 className="text-xl font-semibold mb-3 font-title">
+                {t("advancedLedTechnology")}
               </h3>
               <p className="text-gray-300">
-                4 Different LED sizes, giving you a realistic starry night with multiple sizes of stars. Powered by cutting-edge LEDs, our starlights shine brighter, last longer, and offer endless color options for the perfect atmosphere.
+                {t("advancedLedTechnologyDesc")}
               </p>
             </div>
 
             {/* Quality Point 3 */}
             <div className="text-center bg-white/10 backdrop-blur-sm rounded-lg p-6 hover:bg-white/20 transition-all duration-300">
-              <div className="text-primary text-5xl mb-4">⚡</div>
-              <h3 className="text-xl font-semibold mb-3">
-                Professional Installation
+              <h3 className="text-xl font-semibold mb-3 font-title">
+                {t("professionalInstallation")}
               </h3>
               <p className="text-gray-300">
-                Our skilled team ensures a seamless, factory-like finish — no shortcuts, no loose ends, just perfection in every detail.
+                {t("professionalInstallationDesc")}
               </p>
             </div>
 
             {/* Quality Point 4 */}
             <div className="text-center bg-white/10 backdrop-blur-sm rounded-lg p-6 hover:bg-white/20 transition-all duration-300">
-              <div className="text-primary text-5xl mb-4">🎛️</div>
-              <h3 className="text-xl font-semibold mb-3">Smart Controls</h3>
+              <h3 className="text-xl font-semibold mb-3 font-title">{t("smartControls")}</h3>
               <p className="text-gray-300">
-                Take control of your galaxy with ease — adjust colors, brightness, and effects directly from your phone or remote.
+                {t("smartControlsDesc")}
               </p>
             </div>
 
             {/* Quality Point 5 */}
             <div className="text-center bg-white/10 backdrop-blur-sm rounded-lg p-6 hover:bg-white/20 transition-all duration-300">
-              <div className="text-primary text-5xl mb-4">🛡️</div>
-              <h3 className="text-xl font-semibold mb-3">Premium VIP Car Care Packages</h3>
+              <h3 className="text-xl font-semibold mb-3 font-title">
+                {t("premiumVipCarCare")}
+              </h3>
               <p className="text-gray-300">
-                We stand behind our work. Your starlight headliner is protected by custom warranty plans, giving you peace of mind and lasting confidence.
+                {t("premiumVipCarCareDesc")}
               </p>
             </div>
 
             {/* Quality Point 6 */}
             <div className="text-center bg-white/10 backdrop-blur-sm rounded-lg p-6 hover:bg-white/20 transition-all duration-300">
-              <div className="text-primary text-5xl mb-4">🌟</div>
-              <h3 className="text-xl font-semibold mb-3">Custom Patterns</h3>
+              <h3 className="text-xl font-semibold mb-3 font-title">{t("customPatterns")}</h3>
               <p className="text-gray-300">
-                Personalize your headliner with custom designs that match your style and make your car truly one-of-a-kind.
+                {t("customPatternsDesc")}
               </p>
             </div>
           </div>
@@ -382,128 +469,131 @@ function App() {
       {/* Services Section */}
       <section
         id="packages-section"
-        className="py-20 section-padding relative z-10">
+        className="py-10 section-padding relative z-10">
         <div className="max-w-6xl mx-auto">
-          <h2 className="text-4xl md:text-5xl font-bold text-center text-primary mb-16">
-            Our Packages
+          <h2 className="text-4xl md:text-5xl font-bold text-center text-primary mb-8 font-title">
+            {t("choosingStarlightConfig")}
           </h2>
 
+          <p className="text-gray-300 text-center max-w-4xl mx-auto mb-16 text-lg leading-relaxed">
+            {t("packagesIntro")}
+          </p>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {/* 500-Star Package */}
+            {/* 500 Starlights */}
             <div className="bg-gray-800 p-8 rounded-lg hover:bg-gray-700 transition-colors duration-300 border-2 border-transparent hover:border-primary">
               <div className="text-center mb-6">
-                <div className="text-primary text-4xl mb-4">⭐</div>
-                <h3 className="text-3xl font-bold text-primary mb-2 flex items-center justify-center gap-1">
-                  500
+                <h3 className="text-3xl font-bold text-primary mb-2 flex items-center justify-center gap-1 font-title">
+                  {t("starlights500")}
                 </h3>
-                <h4 className="text-xl font-semibold text-white mb-4">
-                  500-Star Package
-                </h4>
               </div>
               <p className="text-gray-300 mb-6 text-center">
-                Subtle Elegance, Perfect for Any Car. Our 500-star package creates a beautifully spaced starlight effect that transforms any sedan, coupe, or SUV into a personal night sky. With the same premium fiber optics and advanced LEDs, you'll enjoy a clean, elegant galaxy effect that enhances your ride with style and class.
+                {t("starlights500Desc")}
               </p>
               <button
                 className="w-full btn-primary"
                 onClick={() => {
-                  setSelectedPackage("500-Star Package - 500 SAR");
+                  setSelectedPackage(`${t("starlights500")} - 500 SAR`);
                   setShowForm(true);
                 }}>
-                Choose 500-Star
+                {t("choose500")}
               </button>
             </div>
 
-            {/* 1000-Star Package */}
-            <div className="bg-gray-800 p-8 rounded-lg hover:bg-gray-700 transition-colors duration-300 border-2 border-primary transform lg:scale-105">
+            {/* 1000 Starlights */}
+            <div className="bg-gray-800 p-8 rounded-lg hover:bg-gray-700 transition-colors duration-300 border-2 border-transparent hover:border-primary transform lg:scale-105">
               <div className="text-center mb-6">
                 <div className="bg-primary text-white px-3 py-1 rounded-full text-sm font-semibold mb-2 inline-block">
-                  MOST POPULAR
+                  {t("mostPopular")}
                 </div>
-                <div className="text-primary text-4xl mb-4">✨</div>
-                <h3 className="text-3xl font-bold text-primary mb-2 flex items-center justify-center gap-1">
-                  1000
+                <h3 className="text-3xl font-bold text-primary mb-2 flex items-center justify-center gap-1 font-title">
+                  {t("starlights1000")}
                 </h3>
-                <h4 className="text-xl font-semibold text-white mb-4">
-                  1000-Star Package
-                </h4>
               </div>
               <p className="text-gray-300 mb-6 text-center">
-                A Denser Galaxy, Ideal for Sedans & SUVs. Double the stars, double the magic. The 1000-star package delivers a richer, denser starlight experience — perfect for sedans and most SUVs. This package surrounds you with a fuller starry night feel while keeping the same premium quality, smart controls, and immersive lighting features.
+                {t("starlights1000Desc")}
               </p>
               <button
                 className="w-full btn-primary"
                 onClick={() => {
-                  setSelectedPackage("1000-Star Package - 1000 SAR");
+                  setSelectedPackage(`${t("starlights1000")} - 1000 SAR`);
                   setShowForm(true);
                 }}>
-                Choose 1000-Star
+                {t("choose1000")}
               </button>
             </div>
 
-            {/* 1500-Star Package */}
+            {/* 1500 Starlights */}
             <div className="bg-gray-800 p-8 rounded-lg hover:bg-gray-700 transition-colors duration-300 border-2 border-transparent hover:border-primary">
               <div className="text-center mb-6">
-                <div className="text-primary text-4xl mb-4">🌟</div>
-                <h3 className="text-3xl font-bold text-primary mb-2 flex items-center justify-center gap-1">
-                  1500
+                <h3 className="text-3xl font-bold text-primary mb-2 flex items-center justify-center gap-1 font-title">
+                  {t("starlights1500")}
                 </h3>
-                <h4 className="text-xl font-semibold text-white mb-4">
-                  1500-Star Package
-                </h4>
               </div>
               <p className="text-gray-300 mb-6 text-center">
-                The Ultimate Night Sky for Larger Rides. Our 1500-star package is designed for medium to large SUVs, creating the most breathtaking, fully packed galaxy effect possible. With thousands of twinkling fiber optics of varying sizes, this package gives you the most realistic starlight experience.
+                {t("starlights1500Desc")}
               </p>
               <button
                 className="w-full btn-primary"
                 onClick={() => {
-                  setSelectedPackage("1500-Star Package - 1500 SAR");
+                  setSelectedPackage(`${t("starlights1500")} - 1500 SAR`);
                   setShowForm(true);
                 }}>
-                Choose 1500-Star
+                {t("choose1500")}
               </button>
             </div>
           </div>
         </div>
       </section>
 
+      {/* Warranty Section */}
+      <section className="py-10 section-padding relative z-10">
+        <div className="max-w-4xl mx-auto">
+          <h2 className="text-4xl md:text-5xl font-bold text-center text-primary mb-8 font-title">
+            {t("warranty")}
+          </h2>
+          <div className="bg-gray-800 rounded-lg p-8">
+            <p className="text-gray-300 mb-6 text-lg leading-relaxed">
+              {t("warrantyText1")}
+            </p>
+            <p className="text-gray-300 text-lg leading-relaxed">
+              {t("warrantyText2")}
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* About Section */}
-      <section className="py-20 section-padding relative z-10">
+      <section className="py-10 section-padding relative z-10">
         <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-4xl md:text-5xl font-bold text-primary mb-8">
-            Why Choose Arabic Caliber?
+          <h2 className="text-4xl md:text-5xl font-bold text-primary mb-8 font-title">
+            {t("whyChoose")}
           </h2>
           <p className="text-xl text-gray-300 mb-12 leading-relaxed">
-            With years of experience and a passion for perfection, we deliver
-            exceptional car star light installations that transform your
-            vehicle's interior. Our attention to detail and commitment to
-            quality sets us apart in the automotive customization industry.
+            {t("whyChooseText")}
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-16">
             <div className="text-center">
-              <div className="text-primary text-5xl mb-4">🏆</div>
-              <h3 className="text-xl font-semibold mb-2">Premium Quality</h3>
+              <h3 className="text-xl font-semibold mb-2 font-title">{t("premiumQuality")}</h3>
               <p className="text-gray-400">
-                High-grade fiber optics and LED systems
+                {t("premiumQualityDesc")}
               </p>
             </div>
 
             <div className="text-center">
-              <div className="text-primary text-5xl mb-4">⚡</div>
-              <h3 className="text-xl font-semibold mb-2">Fast Service</h3>
+              <h3 className="text-xl font-semibold mb-2 font-title">{t("fastService")}</h3>
               <p className="text-gray-400">
-                Efficient installation without compromising quality
+                {t("fastServiceDesc")}
               </p>
             </div>
 
             <div className="text-center">
-              <div className="text-primary text-5xl mb-4">💯</div>
-              <h3 className="text-xl font-semibold mb-2">
-                Satisfaction Guaranteed
+              <h3 className="text-xl font-semibold mb-2 font-title">
+                {t("satisfactionGuaranteed")}
               </h3>
               <p className="text-gray-400">
-                100% satisfaction or money back guarantee
+                {t("satisfactionGuaranteedDesc")}
               </p>
             </div>
           </div>
@@ -511,33 +601,32 @@ function App() {
       </section>
 
       {/* Contact Section */}
-      <section className="py-20 section-padding relative z-10">
+      <section className="py-10 section-padding relative z-10">
         <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-4xl md:text-5xl font-bold text-primary mb-8">
-            Get In Touch
+          <h2 className="text-4xl md:text-5xl font-bold text-primary mb-8 font-title">
+            {t("getInTouch")}
           </h2>
           <p className="text-xl text-gray-300 mb-12">
-            Ready to transform your car with stunning star lights? Contact us
-            today!
+            {t("contactText")}
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
             <div className="bg-gray-800 p-8 rounded-lg">
-              <h3 className="text-2xl font-semibold mb-4 text-primary">
-                📞 Call Us
+              <h3 className="text-2xl font-semibold mb-4 text-primary font-title">
+                {t("callUs")}
               </h3>
               <p className="text-gray-300 text-lg mb-2">+966 50 123 4567</p>
-              <p className="text-gray-400">Available 7 days a week</p>
+              <p className="text-gray-400">{t("available7Days")}</p>
             </div>
 
             <div className="bg-gray-800 p-8 rounded-lg">
-              <h3 className="text-2xl font-semibold mb-4 text-primary">
-                📧 Email Us
+              <h3 className="text-2xl font-semibold mb-4 text-primary font-title">
+                {t("emailUs")}
               </h3>
               <p className="text-gray-300 text-lg mb-2">
                 info@arabiccaliber.com
               </p>
-              <p className="text-gray-400">Quick response guaranteed</p>
+              <p className="text-gray-400">{t("quickResponse")}</p>
             </div>
           </div>
 
@@ -548,7 +637,7 @@ function App() {
                 document.getElementById("packages-section");
               packagesSection?.scrollIntoView({ behavior: "smooth" });
             }}>
-            GET A QUOTE
+            {t("getAQuote")}
           </button>
         </div>
       </section>
@@ -557,8 +646,7 @@ function App() {
       <footer className="py-8 section-padding relative z-10 border-t border-gray-700/30">
         <div className="max-w-6xl mx-auto text-center">
           <p className="text-gray-400">
-            © 2024 Arabic Caliber. All rights reserved. | Premium Car Star Light
-            Installation
+            {t("copyright")}
           </p>
         </div>
       </footer>
@@ -568,8 +656,8 @@ function App() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 rounded-lg p-8 max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-2xl font-bold text-primary">
-                Get Your Quote
+              <h3 className="text-2xl font-bold text-primary font-title">
+                {t("getYourQuote")}
               </h3>
               <button
                 onClick={closeForm}
@@ -579,17 +667,18 @@ function App() {
             </div>
 
             <div className="mb-4 p-3 bg-primary/20 rounded-lg">
-              <p className="text-sm text-gray-300">Selected Package:</p>
+              <p className="text-sm text-gray-300">{t("selectedPackage")}:</p>
               <p className="font-semibold text-primary">{selectedPackage}</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Full Name *
+                  {t("fullName")} *
                 </label>
                 <input
                   type="text"
+                  name="name"
                   value={formData.name}
                   onChange={(e) => handleInputChange("name", e.target.value)}
                   className={`w-full px-3 py-2 bg-gray-800 border rounded-lg focus:outline-none text-white ${
@@ -597,7 +686,7 @@ function App() {
                       ? "border-red-500 focus:border-red-500"
                       : "border-gray-600 focus:border-primary"
                   }`}
-                  placeholder="Enter your full name"
+                  placeholder={t("fullNamePlaceholder")}
                 />
                 {formErrors.name && (
                   <p className="text-red-400 text-sm mt-1">{formErrors.name}</p>
@@ -606,10 +695,11 @@ function App() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Phone Number *
+                  {t("phoneNumber")} *
                 </label>
                 <input
                   type="tel"
+                  name="phone"
                   value={formData.phone}
                   onChange={(e) => handlePhoneChange(e.target.value)}
                   className={`w-full px-3 py-2 bg-gray-800 border rounded-lg focus:outline-none text-white ${
@@ -617,7 +707,7 @@ function App() {
                       ? "border-red-500 focus:border-red-500"
                       : "border-gray-600 focus:border-primary"
                   }`}
-                  placeholder="+966 5XXXXXXXX"
+                  placeholder={t("phonePlaceholder")}
                   maxLength={14}
                 />
                 {formErrors.phone && (
@@ -629,10 +719,11 @@ function App() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Email Address *
+                  {t("emailAddress")} *
                 </label>
                 <input
                   type="email"
+                  name="email"
                   value={formData.email}
                   onChange={(e) => handleInputChange("email", e.target.value)}
                   className={`w-full px-3 py-2 bg-gray-800 border rounded-lg focus:outline-none text-white ${
@@ -640,7 +731,7 @@ function App() {
                       ? "border-red-500 focus:border-red-500"
                       : "border-gray-600 focus:border-primary"
                   }`}
-                  placeholder="your@email.com"
+                  placeholder={t("emailPlaceholder")}
                 />
                 {formErrors.email && (
                   <p className="text-red-400 text-sm mt-1">
@@ -651,16 +742,17 @@ function App() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Instagram Handle
+                  {t("instagramHandle")}
                 </label>
                 <input
                   type="text"
+                  name="instagram"
                   value={formData.instagram}
                   onChange={(e) =>
                     handleInputChange("instagram", e.target.value)
                   }
                   className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:border-primary focus:outline-none text-white"
-                  placeholder="@username"
+                  placeholder={t("instagramPlaceholder")}
                 />
               </div>
 
@@ -670,8 +762,13 @@ function App() {
                 </label>
                 <input
                   type="number"
+                  name="carYear"
                   value={formData.carYear}
                   onChange={(e) => handleInputChange("carYear", e.target.value)}
+                  onWheel={(e) => {
+                    e.preventDefault();
+                    e.target.blur();
+                  }}
                   min="1990"
                   max="2025"
                   className={`w-full px-3 py-2 bg-gray-800 border rounded-lg focus:outline-none text-white ${
@@ -679,7 +776,7 @@ function App() {
                       ? "border-red-500 focus:border-red-500"
                       : "border-gray-600 focus:border-primary"
                   }`}
-                  placeholder="2023"
+                  placeholder={t("carYearPlaceholder")}
                 />
                 {formErrors.carYear && (
                   <p className="text-red-400 text-sm mt-1">
@@ -690,10 +787,11 @@ function App() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Car Model *
+                  {t("carModel")} *
                 </label>
                 <input
                   type="text"
+                  name="carModel"
                   value={formData.carModel}
                   onChange={(e) =>
                     handleInputChange("carModel", e.target.value)
@@ -703,7 +801,7 @@ function App() {
                       ? "border-red-500 focus:border-red-500"
                       : "border-gray-600 focus:border-primary"
                   }`}
-                  placeholder="BMW X5, Mercedes C-Class, etc."
+                  placeholder={t("carModelPlaceholder")}
                 />
                 {formErrors.carModel && (
                   <p className="text-red-400 text-sm mt-1">
@@ -714,36 +812,36 @@ function App() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Does your car have a sunroof? *
+                  {t("hasSunroof")} *
                 </label>
                 <div className="flex gap-4">
-                  <label className="flex items-center">
+                  <label className="flex items-center gap-2">
                     <input
                       type="radio"
                       name="sunroof"
                       value="yes"
                       checked={formData.sunroof === "yes"}
-                      className="mr-2 accent-primary"
+                      className="accent-primary"
                       onChange={(e) => {
                         handleInputChange("sunroof", e.target.value);
                         setHasSunroof(e.target.value);
                       }}
                     />
-                    <span className="text-white">Yes</span>
+                    <span className="text-white">{t("yes")}</span>
                   </label>
-                  <label className="flex items-center">
+                  <label className="flex items-center gap-2">
                     <input
                       type="radio"
                       name="sunroof"
                       value="no"
                       checked={formData.sunroof === "no"}
-                      className="mr-2 accent-primary"
+                      className="accent-primary"
                       onChange={(e) => {
                         handleInputChange("sunroof", e.target.value);
                         setHasSunroof(e.target.value);
                       }}
                     />
-                    <span className="text-white">No</span>
+                    <span className="text-white">{t("no")}</span>
                   </label>
                 </div>
                 {formErrors.sunroof && (
@@ -753,56 +851,170 @@ function App() {
                 )}
               </div>
 
-              {/* Conditional Electric Sunroof Question */}
+              {/* Conditional Sunroof Questions */}
               {hasSunroof === "yes" && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Is it an electric sunroof? *
-                  </label>
-                  <div className="flex gap-4">
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        name="electricSunroof"
-                        value="yes"
-                        checked={formData.electricSunroof === "yes"}
-                        className="mr-2 accent-primary"
-                        onChange={(e) =>
-                          handleInputChange("electricSunroof", e.target.value)
-                        }
-                      />
-                      <span className="text-white">Yes</span>
+                <>
+                  {/* Panoramic Sunroof Question */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Is it panoramic sunroof? *
                     </label>
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        name="electricSunroof"
-                        value="no"
-                        checked={formData.electricSunroof === "no"}
-                        className="mr-2 accent-primary"
-                        onChange={(e) =>
-                          handleInputChange("electricSunroof", e.target.value)
-                        }
-                      />
-                      <span className="text-white">No</span>
-                    </label>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="panoramicSunroof"
+                          value="yes"
+                          checked={formData.panoramicSunroof === "yes"}
+                          className="accent-primary"
+                          onChange={(e) =>
+                            handleInputChange(
+                              "panoramicSunroof",
+                              e.target.value
+                            )
+                          }
+                        />
+                        <span className="text-white">Yes</span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="panoramicSunroof"
+                          value="no"
+                          checked={formData.panoramicSunroof === "no"}
+                          className="accent-primary"
+                          onChange={(e) =>
+                            handleInputChange(
+                              "panoramicSunroof",
+                              e.target.value
+                            )
+                          }
+                        />
+                        <span className="text-white">No</span>
+                      </label>
+                    </div>
+                    {formErrors.panoramicSunroof && (
+                      <p className="text-red-400 text-sm mt-1">
+                        {formErrors.panoramicSunroof}
+                      </p>
+                    )}
                   </div>
-                  {formErrors.electricSunroof && (
-                    <p className="text-red-400 text-sm mt-1">
-                      {formErrors.electricSunroof}
-                    </p>
-                  )}
-                </div>
+
+                  {/* Electric Sunroof Question */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      {t("isElectric")} *
+                    </label>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="electricSunroof"
+                          value="yes"
+                          checked={formData.electricSunroof === "yes"}
+                          className="accent-primary"
+                          onChange={(e) =>
+                            handleInputChange("electricSunroof", e.target.value)
+                          }
+                        />
+                        <span className="text-white">{t("yes")}</span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="electricSunroof"
+                          value="no"
+                          checked={formData.electricSunroof === "no"}
+                          className="accent-primary"
+                          onChange={(e) =>
+                            handleInputChange("electricSunroof", e.target.value)
+                          }
+                        />
+                        <span className="text-white">{t("no")}</span>
+                      </label>
+                    </div>
+                    {formErrors.electricSunroof && (
+                      <p className="text-red-400 text-sm mt-1">
+                        {formErrors.electricSunroof}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Manual Sunroof Question */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      {t("isManual")} *
+                    </label>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="manualSunroof"
+                          value="yes"
+                          checked={formData.manualSunroof === "yes"}
+                          className="accent-primary"
+                          onChange={(e) =>
+                            handleInputChange("manualSunroof", e.target.value)
+                          }
+                        />
+                        <span className="text-white">{t("yes")}</span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="manualSunroof"
+                          value="no"
+                          checked={formData.manualSunroof === "no"}
+                          className="accent-primary"
+                          onChange={(e) =>
+                            handleInputChange("manualSunroof", e.target.value)
+                          }
+                        />
+                        <span className="text-white">{t("no")}</span>
+                      </label>
+                    </div>
+                    {formErrors.manualSunroof && (
+                      <p className="text-red-400 text-sm mt-1">
+                        {formErrors.manualSunroof}
+                      </p>
+                    )}
+                  </div>
+                </>
               )}
 
               <div className="pt-4">
                 <button
                   type="submit"
-                  className="w-full btn-primary text-lg py-3">
-                  Get Quote
+                  disabled={isSubmitting}
+                  className="w-full btn-primary text-lg py-3 disabled:opacity-50 disabled:cursor-not-allowed">
+                  {isSubmitting ? t("submitting") : t("getQuote")}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Success Modal */}
+      {showSuccess && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 rounded-lg p-8 max-w-md w-full text-center">
+            <div className="mb-6">
+              <h3 className="text-3xl font-bold text-primary mb-4 font-title">
+                {t("thankYou")}
+              </h3>
+              <p className="text-xl text-gray-300 mb-2">
+                {t("successMessage")}
+              </p>
+              <p className="text-gray-400">
+                {t("successMessage2")}
+              </p>
+            </div>
+            <button
+              onClick={() => setShowSuccess(false)}
+              className="w-full btn-primary text-lg py-3">
+              {t("close")}
+            </button>
           </div>
         </div>
       )}
@@ -811,5 +1023,3 @@ function App() {
 }
 
 export default App;
-
-
